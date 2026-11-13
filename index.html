@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sound Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2334d399'/%3E%3Cpath d='M7 18v-4M11 22V10M15 25V7M19 20v-8M23 23V9M27 17v-2' stroke='%23062b1e' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f1113; --panel: #171a1d; --panel-2: #1d2125; --line: #2a2f35; --line-2: #353b42;
+    --text: #e9edf0; --muted: #8d969f; --faint: #5d656d;
+    --accent: #34d399; --accent-2: #10b981; --accent-ink: #052e20; --accent-soft: rgba(52, 211, 153, .14);
+    --warn: #fbbf24; --err: #f87171; --err-soft: rgba(248, 113, 113, .12);
+    --wave: #4b535b; --wave-sel: #34d399; --shade: rgba(0, 0, 0, .45);
+    --shadow: 0 10px 40px rgba(0, 0, 0, .45);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f5f4; --panel: #ffffff; --panel-2: #f6f8f7; --line: #e1e6e3; --line-2: #d3d9d6;
+      --text: #15191c; --muted: #66707a; --faint: #9aa3ab;
+      --accent: #10b981; --accent-2: #059669; --accent-ink: #ffffff; --accent-soft: rgba(16, 185, 129, .12);
+      --warn: #b45309; --err: #dc2626; --err-soft: rgba(220, 38, 38, .08);
+      --wave: #c3cbc7; --wave-sel: #10b981; --shade: rgba(255, 255, 255, .55);
+      --shadow: 0 10px 40px rgba(20, 30, 25, .15);
+      color-scheme: light;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; user-select: none;
+  }
+  input, textarea { user-select: text; }
+  button { font: inherit; color: inherit; }
+  code, .mono { font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; padding: 18px; max-width: 1500px; margin: 0 auto; min-height: 100%; }
+  @media (max-width: 980px) { .app { grid-template-columns: 1fr; } }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 2px 4px 4px; }
+  .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); display: grid; place-items: center; flex: none; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 18px; }
+  .card-h { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .step { width: 22px; height: 22px; border-radius: 99px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--muted); flex: none; }
+  .card.ready .step { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .card-h h2 { font-size: 14.5px; margin: 0; font-weight: 650; }
+  .card-h .spacer { flex: 1; }
+
+  label.l { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+  .input { width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); font: inherit; outline: none; transition: border-color .15s, box-shadow .15s; }
+  .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input.mono { font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace; font-size: 13.5px; }
+  .input.bad { border-color: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
+
+  .btn { height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--panel-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; transition: background .12s, border-color .12s, transform .05s; }
+  .btn:hover { border-color: var(--faint); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .45; cursor: default; transform: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 650; }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); background: var(--panel-2); }
+  .btn.sm { height: 32px; padding: 0 10px; font-size: 13px; border-radius: 8px; }
+  .btn.icon { width: 32px; padding: 0; }
+  .btn.danger:hover { color: var(--err); border-color: var(--err); }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  .big { height: 50px; font-size: 15px; border-radius: 12px; width: 100%; }
+
+  .row { display: flex; gap: 10px; align-items: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  /* URL + video */
+  .video { display: none; gap: 14px; align-items: center; margin-top: 14px; }
+  .video.show { display: flex; }
+  .thumb { width: 96px; aspect-ratio: 16/9; border-radius: 8px; object-fit: cover; background: var(--panel-2); flex: none; }
+  .video .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .video .s { color: var(--muted); font-size: 12.5px; }
+  .progress { display: none; margin-top: 14px; }
+  .progress.show { display: block; }
+  .bar { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  .bar.indet > div { width: 30% !important; animation: indet 1.1s ease-in-out infinite; }
+  @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+  .progress .s { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+
+  /* Trimmer */
+  .trim { display: none; margin-top: 16px; }
+  .trim.show { display: block; }
+  .wave-wrap { position: relative; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+  canvas#wave { display: block; width: 100%; height: 132px; cursor: crosshair; touch-action: none; }
+  .ruler { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; padding: 4px 2px 0; }
+  .transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .play { width: 44px; height: 44px; border-radius: 99px; padding: 0; }
+  .play svg { width: 18px; height: 18px; }
+  .times { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+  .tbox { display: flex; flex-direction: column; gap: 2px; }
+  .tbox span { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; padding-left: 2px; }
+  .tbox input { width: 104px; height: 34px; text-align: center; }
+  .dur { min-width: 80px; text-align: center; padding-top: 14px; color: var(--muted); }
+  .dur b { color: var(--text); font-weight: 600; }
+  .toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .hint { color: var(--faint); font-size: 12px; margin-top: 10px; }
+  kbd { font: 11px "Cascadia Mono", Consolas, monospace; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--muted); }
+
+  /* Target */
+  .target { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--panel-2); cursor: pointer; transition: border-color .15s; }
+  .target:hover { border-color: var(--accent); }
+  .target .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+  .target .ic svg { width: 20px; height: 20px; }
+  .target .n { font-weight: 600; }
+  .target .p { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+  .target .meta { min-width: 0; flex: 1; }
+  .target.empty { border-style: dashed; color: var(--muted); justify-content: center; padding: 18px; }
+  .badge { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line-2); color: var(--muted); margin-left: 6px; vertical-align: 1px; }
+  .badge.g { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* Segmented + switch */
+  .seg { display: flex; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 3px; height: 40px; }
+  .seg button { flex: 1; border: 0; background: transparent; color: var(--muted); border-radius: 7px; cursor: pointer; font-size: 13px; }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  .switch { display: flex; align-items: center; gap: 10px; height: 40px; cursor: pointer; }
+  .switch input { display: none; }
+  .switch .tr { width: 38px; height: 22px; border-radius: 99px; background: var(--line-2); position: relative; transition: background .15s; flex: none; }
+  .switch .tr::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 99px; background: #fff; transition: transform .15s; }
+  .switch input:checked + .tr { background: var(--accent); }
+  .switch input:checked + .tr::after { transform: translateX(16px); }
+  .switch small { display: block; color: var(--faint); font-size: 11.5px; }
+
+  .preview { margin-top: 12px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; color: var(--muted); padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+  .preview code { color: var(--text); overflow-wrap: anywhere; }
+  .warnline { color: var(--warn); font-size: 12.5px; margin-top: 8px; display: none; }
+  .warnline.show { display: block; }
+
+  details.more { margin-top: 14px; }
+  details.more summary { cursor: pointer; color: var(--muted); font-size: 13px; list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+  details.more summary::before { content: "›"; display: inline-block; transition: transform .15s; font-size: 16px; line-height: 1; }
+  details.more[open] summary::before { transform: rotate(90deg); }
+  details.more .grid3 { margin-top: 12px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 40px; }
+  .rangev { display: flex; justify-content: space-between; }
+  .rangev b { font-weight: 600; color: var(--text); font-size: 12px; }
+
+  /* Result */
+  .result { display: none; margin-top: 12px; padding: 14px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent-soft); }
+  .result.show { display: block; animation: pop .25s ease-out; }
+  .result h3 { margin: 0 0 6px; font-size: 14px; color: var(--accent); }
+  .result p { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
+  .cmd { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .cmd code { flex: 1; padding: 8px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); color: var(--text); overflow-wrap: anywhere; user-select: all; }
+  .errbox { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--err); background: var(--err-soft); color: var(--err); font-size: 13px; overflow-wrap: anywhere; user-select: text; }
+  .errbox.show { display: block; }
+  @keyframes pop { from { transform: scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* Library */
+  aside .card { position: sticky; top: 18px; max-height: calc(100vh - 36px); display: flex; flex-direction: column; }
+  .lib-h .sub { color: var(--muted); font-size: 12px; }
+  .search { height: 34px; margin-bottom: 10px; }
+  .lib { overflow: auto; margin: 0 -8px; padding: 0 8px; flex: 1; min-height: 120px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 10px; }
+  .item:hover { background: var(--panel-2); }
+  .item .nm { flex: 1; min-width: 0; }
+  .item .nm div:first-child { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .nm div + div { font-size: 11.5px; color: var(--faint); }
+  .item .acts { display: flex; gap: 2px; opacity: .55; }
+  .item:hover .acts { opacity: 1; }
+  .item.new { animation: flash 1.6s ease-out; }
+  @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
+  .empty-lib { color: var(--faint); text-align: center; padding: 28px 10px; font-size: 13px; }
+
+  /* Modal */
+  dialog { border: 1px solid var(--line-2); border-radius: 18px; background: var(--panel); color: var(--text); padding: 0; width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 60px); box-shadow: var(--shadow); }
+  dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(2px); }
+  .m-h { display: flex; align-items: center; padding: 16px 18px 10px; }
+  .m-h h3 { margin: 0; font-size: 15.5px; flex: 1; }
+  .m-b { padding: 0 18px 18px; overflow: auto; max-height: calc(100vh - 140px); }
+  .actions3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 560px) { .actions3 { grid-template-columns: 1fr; } }
+  .actions3 .btn { height: auto; padding: 14px 10px; flex-direction: column; gap: 6px; border-radius: 12px; }
+  .actions3 .btn svg { width: 20px; height: 20px; color: var(--accent); }
+  .actions3 .btn small { color: var(--faint); font-size: 11.5px; white-space: normal; }
+  .grp { margin-top: 18px; }
+  .grp h4 { margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 650; }
+  .pick { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 10px; border-radius: 10px; border: 1px solid transparent; background: transparent; cursor: pointer; }
+  .pick:hover { background: var(--panel-2); border-color: var(--line); }
+  .pick svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
+  .pick .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick.cur { border-color: var(--accent); background: var(--accent-soft); }
+  .m-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .confirm-txt { color: var(--muted); margin: 0 0 4px; }
+
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 13px; pointer-events: none; transition: all .2s; z-index: 50; box-shadow: var(--shadow); }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .spin { width: 16px; height: 16px; border-radius: 99px; border: 2px solid currentColor; border-right-color: transparent; animation: rot .7s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h4v16H6zM14 4h4v16h-4z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v9.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 3v2m0 2v2m0 2v2m-1 2h2v3h-2z"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="m12 3 8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M9 9h10v11H9zM5 15V4h10"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-loop" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-zoom" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM21 21l-5-5M8 10.5h5M10.5 8v5"/></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-paste" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M9 4h6v3H9zM9 5.5H6a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6.5a1 1 0 0 0-1-1h-3"/></symbol>
+</svg>
+
+<div class="app">
+  <header>
+    <div class="logo"><svg width="20" height="20" viewBox="0 0 32 32"><path d="M5 18v-4M10 23V9M16 27V5M22 21V11M27 17v-2" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" fill="none"/></svg></div>
+    <div><h1>Sound Studio</h1><p>De YouTube a un sonido de Minecraft, listo para sonar en el juego.</p></div>
+  </header>
+
+  <div class="col">
+    <!-- 1. Audio -->
+    <section class="card" id="cardAudio">
+      <div class="card-h"><div class="step">1</div><h2>Audio de YouTube</h2></div>
+      <div class="row">
+        <input class="input" id="url" placeholder="Pega aquí el enlace de YouTube…" autocomplete="off" spellcheck="false">
+        <button class="btn" id="pasteBtn" title="Pegar del portapapeles"><svg><use href="#i-paste"/></svg>Pegar</button>
+        <button class="btn primary" id="loadBtn">Cargar</button>
+      </div>
+      <div class="progress" id="prog">
+        <div class="bar" id="progBar"><div id="progFill"></div></div>
+        <div class="s" id="progText">Conectando…</div>
+      </div>
+      <div class="video" id="video">
+        <img class="thumb" id="thumb" alt="">
+        <div style="min-width:0"><div class="t" id="vTitle"></div><div class="s" id="vSub"></div></div>
+      </div>
+      <div class="errbox" id="audioErr"></div>
+
+      <div class="trim" id="trim">
+        <div class="wave-wrap"><canvas id="wave"></canvas></div>
+        <div class="ruler"><span id="rulerA">0:00</span><span id="rulerHint">Arrastra para seleccionar · rueda para hacer zoom</span><span id="rulerB">0:00</span></div>
+        <div class="transport">
+          <button class="btn primary play" id="playBtn" title="Reproducir selección (Espacio)"><svg><use href="#i-play" id="playIcon"/></svg></button>
+          <button class="btn sm toggle" id="loopBtn" title="Repetir la selección"><svg><use href="#i-loop"/></svg>Loop</button>
+          <button class="btn sm" id="inBtn" title="Poner el inicio en el cursor (I)">Inicio aquí <kbd>I</kbd></button>
+          <button class="btn sm" id="outBtn" title="Poner el final en el cursor (O)">Fin aquí <kbd>O</kbd></button>
+          <button class="btn sm icon" id="zoomSelBtn" title="Zoom a la selección"><svg><use href="#i-zoom"/></svg></button>
+          <button class="btn sm icon" id="zoomAllBtn" title="Ver todo"><svg><use href="#i-full"/></svg></button>
+          <div class="times">
+            <label class="tbox"><span>Inicio</span><input class="input mono" id="tStart" value="0:00.000"></label>
+            <label class="tbox"><span>Fin</span><input class="input mono" id="tEnd" value="0:00.000"></label>
+            <div class="dur">Duración<br><b id="tDur">0:00.000</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Destino -->
+    <section class="card" id="cardTarget">
+      <div class="card-h"><div class="step">2</div><h2>Destino</h2><div class="spacer"></div>
+        <button class="btn sm ghost" id="revealBtn" style="display:none" title="Abrir en el Explorador"><svg><use href="#i-open"/></svg>Abrir</button>
+      </div>
+      <div class="target empty" id="targetBox">Elegir resource pack o mod…</div>
+    </section>
+
+    <!-- 3. Sonido -->
+    <section class="card" id="cardSound">
+      <div class="card-h"><div class="step">3</div><h2>Sonido</h2></div>
+      <div class="grid2" style="grid-template-columns: 1fr 200px">
+        <div>
+          <label class="l" for="name">Nombre del sonido</label>
+          <input class="input mono" id="name" placeholder="pantheon.fountain.1" autocomplete="off" spellcheck="false">
+        </div>
+        <div>
+          <label class="l" for="ns">Namespace</label>
+          <input class="input mono" id="ns" list="nsList" placeholder="minecraft" autocomplete="off" spellcheck="false">
+          <datalist id="nsList"></datalist>
+        </div>
+      </div>
+      <div class="warnline" id="existsWarn">Ya existe un sonido con este nombre: podrás reemplazarlo o añadirlo como variante.</div>
+      <div class="grid2" style="margin-top:14px">
+        <div>
+          <label class="l">Canales</label>
+          <div class="seg" id="chanSeg">
+            <button data-v="stereo" aria-pressed="true" title="Suena igual en todas partes (música, ambiente)">Estéreo · ambiente</button>
+            <button data-v="mono" aria-pressed="false" title="Se atenúa con la distancia (sonido en el mundo)">Mono · posicional</button>
+          </div>
+        </div>
+        <div>
+          <label class="l">Carga</label>
+          <label class="switch"><input type="checkbox" id="stream" checked><span class="tr"></span>
+            <span>Stream<small>Empieza a sonar al instante, sin tirón</small></span></label>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <label class="l" for="subtitle">Subtítulo <span style="font-weight:400;color:var(--faint)">(opcional)</span></label>
+        <input class="input" id="subtitle" placeholder="Ej.: La fuente murmura" autocomplete="off">
+      </div>
+      <details class="more" id="more">
+        <summary>Ajustes de audio</summary>
+        <div class="grid3">
+          <div><div class="rangev"><label class="l" for="fadeIn">Fade in</label><b id="fadeInV">0 s</b></div><input type="range" id="fadeIn" min="0" max="5" step="0.1" value="0"></div>
+          <div><div class="rangev"><label class="l" for="fadeOut">Fade out</label><b id="fadeOutV">0 s</b></div><input type="range" id="fadeOut" min="0" max="5" step="0.1" value="0"></div>
+          <div><div class="rangev"><label class="l" for="volume">Volumen</label><b id="volumeV">100 %</b></div><input type="range" id="volume" min="10" max="200" step="5" value="100"></div>
+        </div>
+      </details>
+      <div class="preview" id="preview">
+        <span>Evento</span><code id="pvEvent">—</code>
+        <span>Archivo</span><code id="pvFile">—</code>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn primary big" id="addBtn" disabled>Añadir al pack</button>
+      </div>
+      <div class="errbox" id="addErr"></div>
+      <div class="result" id="result">
+        <h3 id="resTitle">¡Listo!</h3>
+        <div class="cmd"><code id="resCmd"></code><button class="btn sm" id="copyCmd"><svg><use href="#i-copy"/></svg>Copiar</button></div>
+        <p id="resHow"></p>
+      </div>
+    </section>
+  </div>
+
+  <aside class="col">
+    <section class="card">
+      <div class="card-h lib-h"><h2 style="flex:1">En este pack</h2><span class="sub" id="libCount"></span></div>
+      <input class="input search" id="libSearch" placeholder="Buscar sonido…" autocomplete="off">
+      <div class="lib" id="lib"><div class="empty-lib">Elige un destino para ver sus sonidos.</div></div>
+    </section>
+  </aside>
+</div>
+
+<!-- Target picker -->
+<dialog id="pickDlg">
+  <div class="m-h"><h3>Elegir destino</h3><button class="btn ghost icon sm" data-close><svg><use href="#i-x"/></svg></button></div>
+  <div class="m-b">
+    <div class="actions3">
+      <button class="btn" id="pickFolder"><svg><use href="#i-folder"/></svg>Carpeta<small>Resource pack o proyecto de mod</small></button>
+      <button class="btn" id="pickZip"><svg><use href="#i-zip"/></svg>Archivo .zip<small>Resource pack comprimido</small></button>
+      <button class="btn" id="pickNew"><svg><use href="#i-plus"/></svg>Pack nuevo<small>Crear uno vacío</small></button>
+    </div>
+    <div id="pickLists"></div>
+  </div>
+</dialog>
+
+<!-- New pack -->
+<dialog id="newDlg">
+  <div class="m-h"><h3>Crear resource pack nuevo</h3><button class="btn ghost icon sm" data-close><svg><use href="#i-x"/></svg></button></div>
+  <div class="m-b">
+    <div class="grid2">
+      <div><label class="l" for="npName">Nombre del pack</label><input class="input" id="npName" placeholder="Mis sonidos"></div>
+      <div><label class="l" for="npNs">Namespace</label><input class="input mono" id="npNs" placeholder="pantheon"></div>
+    </div>
+    <div style="margin-top:14px"><label class="l" for="npDesc">Descripción <span style="font-weight:400;color:var(--faint)">(opcional)</span></label><input class="input" id="npDesc" placeholder="Sonidos personalizados"></div>
+    <div style="margin-top:14px">
+      <label class="l">Ubicación</label>
+      <div class="row"><select class="input" id="npDir"></select><button class="btn" id="npBrowse">Otra…</button></div>
+    </div>
+    <div class="errbox" id="npErr"></div>
+    <div class="m-foot"><button class="btn ghost" data-close>Cancelar</button><button class="btn primary" id="npCreate">Crear pack</button></div>
+  </div>
+</dialog>
+
+<!-- Exists confirm -->
+<dialog id="existsDlg" style="width:min(460px, calc(100vw - 32px))">
+  <div class="m-h"><h3 id="existsTitle">Ese sonido ya existe</h3></div>
+  <div class="m-b">
+    <p class="confirm-txt">¿Qué quieres hacer?</p>
+    <p class="confirm-txt" style="font-size:12.5px;color:var(--faint)">Una variante se añade al mismo evento y Minecraft elige una al azar cada vez que suena.</p>
+    <div class="m-foot"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn" value="variant">Añadir variante</button><button class="btn primary" value="replace">Reemplazar</button></div>
+  </div>
+</dialog>
+
+<!-- Delete confirm -->
+<dialog id="delDlg" style="width:min(440px, calc(100vw - 32px))">
+  <div class="m-h"><h3>¿Eliminar sonido?</h3></div>
+  <div class="m-b">
+    <p class="confirm-txt">Se quitará <code id="delName"></code> de sounds.json y se borrarán sus archivos .ogg del pack.</p>
+    <div class="m-foot"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn primary" value="ok" style="background:var(--err);border-color:var(--err);color:#fff">Eliminar</button></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+<audio id="libAudio" preload="none"></audio>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ss." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("ss." + k, JSON.stringify(v)); } catch {} },
+};
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Studio": "1" }, body: JSON.stringify(body) };
+  const res = await fetch(path, opts);
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+  return data;
+}
+
+let toastT;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1800);
+}
+function showErr(id, msg) { const e = $(id); e.textContent = msg || ""; e.classList.toggle("show", !!msg); }
+
+// ------------------------------------------------------------ time helpers
+function fmt(t, ms = true) {
+  t = Math.max(0, t || 0);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const ss = ms ? s.toFixed(3).padStart(6, "0") : String(Math.floor(s)).padStart(2, "0");
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + ss;
+}
+function parseTime(str) {
+  const parts = String(str).trim().replace(",", ".").split(":").map(Number);
+  if (!parts.length || parts.some((n) => isNaN(n))) return null;
+  return parts.reduce((acc, n) => acc * 60 + n, 0);
+}
+
+// ------------------------------------------------------------ state
+const S = {
+  video: null, peaks: null, pps: 100, peakMax: 1, dur: 0,
+  sel: [0, 0], view: [0, 1], loop: false,
+  target: null, sounds: [], stereo: store.get("stereo", true),
+};
+
+// ------------------------------------------------------------ loading audio
+async function loadUrl() {
+  const url = $("url").value.trim();
+  if (!url) return $("url").focus();
+  showErr("audioErr", "");
+  $("loadBtn").disabled = true;
+  $("prog").classList.add("show");
+  $("progBar").classList.add("indet");
+  $("progText").textContent = "Conectando con YouTube…";
+  try {
+    const { id } = await api("/api/fetch", { url });
+    await pollJob(id);
+  } catch (e) {
+    $("prog").classList.remove("show");
+    showErr("audioErr", e.message);
+  } finally {
+    $("loadBtn").disabled = false;
+  }
+}
+
+async function pollJob(id) {
+  for (;;) {
+    const job = await api(`/api/jobs/${id}`);
+    if (job.status === "downloading") {
+      $("progBar").classList.remove("indet");
+      $("progFill").style.width = (job.percent || 0) + "%";
+      $("progText").textContent = `Descargando audio… ${(job.percent || 0).toFixed(0)} %`;
+    } else if (job.status === "analyzing") {
+      $("progBar").classList.add("indet");
+      $("progText").textContent = "Analizando la forma de onda…";
+    } else if (job.status === "done") {
+      $("prog").classList.remove("show");
+      return setVideo(job.video);
+    } else if (job.status === "error") {
+      throw new Error(job.error || "No se pudo descargar.");
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+function setVideo(v) {
+  S.video = v; S.dur = v.duration; S.pps = v.peaksPerSecond;
+  const bin = atob(v.peaks); const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  S.peaks = arr;
+  let mx = 1; for (const p of arr) if (p > mx) mx = p; S.peakMax = mx;
+  S.view = [0, S.dur];
+  S.sel = [0, S.dur];
+  $("thumb").src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+  $("vTitle").textContent = v.title;
+  $("vSub").textContent = [v.uploader, fmt(v.duration, false)].filter(Boolean).join(" · ");
+  $("video").classList.add("show");
+  $("trim").classList.add("show");
+  $("cardAudio").classList.add("ready");
+  const audio = $("audio");
+  audio.src = `/api/media/${v.id}`;
+  if (!$("name").value) {
+    // Suggest nothing destructive: leave the name for the user, just focus it if a target is set.
+  }
+  syncTimes(); resize(); updateAll();
+}
+
+$("loadBtn").onclick = loadUrl;
+$("url").addEventListener("keydown", (e) => { if (e.key === "Enter") loadUrl(); });
+$("url").addEventListener("paste", () => setTimeout(() => { if (/youtu/.test($("url").value)) loadUrl(); }, 0));
+$("pasteBtn").onclick = async () => {
+  try {
+    const txt = (await navigator.clipboard.readText()).trim();
+    if (!txt) return toast("El portapapeles está vacío");
+    $("url").value = txt; loadUrl();
+  } catch { $("url").focus(); toast("Pulsa Ctrl+V para pegar"); }
+};
+
+// ------------------------------------------------------------ waveform
+const cv = $("wave"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
+  cv.width = W * DPR; cv.height = H * DPR;
+  draw();
+}
+new ResizeObserver(resize).observe(cv);
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const tToX = (t) => ((t - S.view[0]) / (S.view[1] - S.view[0])) * W;
+const xToT = (x) => S.view[0] + (x / W) * (S.view[1] - S.view[0]);
+
+function draw() {
+  if (!S.peaks) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const [a, b] = S.view, span = b - a, mid = H / 2;
+  const cWave = css("--wave"), cSel = css("--wave-sel");
+  const sx0 = tToX(S.sel[0]), sx1 = tToX(S.sel[1]);
+  const bar = 2, gap = 1, step = bar + gap;
+  for (let x = 0; x < W; x += step) {
+    const t0 = a + (x / W) * span, t1 = a + ((x + step) / W) * span;
+    let i0 = Math.floor(t0 * S.pps), i1 = Math.max(i0 + 1, Math.ceil(t1 * S.pps));
+    i0 = Math.max(0, i0); i1 = Math.min(S.peaks.length, i1);
+    let p = 0; const inc = Math.max(1, Math.floor((i1 - i0) / 64));
+    for (let i = i0; i < i1; i += inc) if (S.peaks[i] > p) p = S.peaks[i];
+    const h = Math.max(1.5, Math.pow(p / S.peakMax, 0.8) * (mid - 8));
+    ctx.fillStyle = x + bar >= sx0 && x <= sx1 ? cSel : cWave;
+    ctx.fillRect(x, mid - h, bar, h * 2);
+  }
+  // shade outside selection
+  ctx.fillStyle = css("--shade");
+  if (sx0 > 0) ctx.fillRect(0, 0, Math.min(W, sx0), H);
+  if (sx1 < W) ctx.fillRect(Math.max(0, sx1), 0, W - Math.max(0, sx1), H);
+  // handles
+  for (const x of [sx0, sx1]) {
+    if (x < -10 || x > W + 10) continue;
+    ctx.fillStyle = cSel;
+    ctx.fillRect(Math.round(x) - 1, 0, 2, H);
+    ctx.beginPath(); ctx.roundRect(Math.round(x) - 5, mid - 14, 10, 28, 4); ctx.fill();
+    ctx.fillStyle = css("--accent-ink");
+    ctx.fillRect(Math.round(x) - 1.5, mid - 6, 1, 12); ctx.fillRect(Math.round(x) + 0.5, mid - 6, 1, 12);
+  }
+  // playhead
+  const ph = tToX($("audio").currentTime || 0);
+  if (ph >= 0 && ph <= W) { ctx.fillStyle = css("--text"); ctx.fillRect(Math.round(ph), 0, 1.5, H); }
+  $("rulerA").textContent = fmt(a, span < 30);
+  $("rulerB").textContent = fmt(b, span < 30);
+}
+
+let drag = null;
+cv.addEventListener("pointerdown", (e) => {
+  if (!S.peaks) return;
+  cv.setPointerCapture(e.pointerId);
+  const x = e.offsetX, t = xToT(x);
+  const d0 = Math.abs(x - tToX(S.sel[0])), d1 = Math.abs(x - tToX(S.sel[1]));
+  if (Math.min(d0, d1) < 9) drag = { kind: d0 <= d1 ? 0 : 1 };
+  else drag = { kind: "new", x0: x, t0: t, moved: false };
+});
+cv.addEventListener("pointermove", (e) => {
+  if (!S.peaks) return;
+  const x = e.offsetX;
+  if (!drag) {
+    const near = Math.min(Math.abs(x - tToX(S.sel[0])), Math.abs(x - tToX(S.sel[1]))) < 9;
+    cv.style.cursor = near ? "ew-resize" : "crosshair"; return;
+  }
+  const t = clamp(xToT(x), 0, S.dur);
+  if (drag.kind === "new") {
+    if (Math.abs(x - drag.x0) < 4 && !drag.moved) return;
+    drag.moved = true;
+    S.sel = [Math.min(drag.t0, t), Math.max(drag.t0, t)];
+  } else {
+    S.sel[drag.kind] = t;
+    if (S.sel[0] > S.sel[1]) { S.sel.reverse(); drag.kind = 1 - drag.kind; }
+  }
+  syncTimes(); draw();
+});
+cv.addEventListener("pointerup", (e) => {
+  if (drag && drag.kind === "new" && !drag.moved) seek(clamp(drag.t0, 0, S.dur));
+  else if (drag && typeof drag.kind === "number") seek(S.sel[drag.kind]);
+  else if (drag) seek(S.sel[0]);
+  drag = null; updateAll();
+});
+cv.addEventListener("wheel", (e) => {
+  if (!S.peaks) return;
+  e.preventDefault();
+  const [a, b] = S.view, span = b - a;
+  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+    const dt = ((e.deltaX || e.deltaY) / W) * span;
+    setView(a + dt, b + dt);
+  } else {
+    const t = xToT(e.offsetX), k = Math.exp(e.deltaY * 0.0015);
+    const ns = clamp(span * k, 0.25, S.dur);
+    const f = (t - a) / span;
+    setView(t - f * ns, t - f * ns + ns);
+  }
+}, { passive: false });
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function setView(a, b) {
+  const span = Math.min(b - a, S.dur);
+  if (a < 0) { a = 0; b = span; }
+  if (b > S.dur) { b = S.dur; a = S.dur - span; }
+  S.view = [a, b]; draw();
+}
+function zoomToSel() {
+  const len = S.sel[1] - S.sel[0], pad = Math.max(0.2, len * 0.08);
+  setView(S.sel[0] - pad, S.sel[1] + pad);
+}
+$("zoomSelBtn").onclick = zoomToSel;
+$("zoomAllBtn").onclick = () => setView(0, S.dur);
+
+function syncTimes() {
+  $("tStart").value = fmt(S.sel[0]); $("tEnd").value = fmt(S.sel[1]);
+  $("tDur").textContent = fmt(S.sel[1] - S.sel[0]);
+  $("tStart").classList.remove("bad"); $("tEnd").classList.remove("bad");
+}
+for (const [id, idx] of [["tStart", 0], ["tEnd", 1]]) {
+  const el = $(id);
+  const apply = () => {
+    const t = parseTime(el.value);
+    if (t === null || t < 0 || t > S.dur + 0.001) return el.classList.add("bad");
+    const sel = [...S.sel]; sel[idx] = Math.min(t, S.dur);
+    if (sel[0] >= sel[1]) return el.classList.add("bad");
+    S.sel = sel; syncTimes(); draw(); updateAll();
+  };
+  el.addEventListener("change", apply);
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") { apply(); el.blur(); } });
+}
+
+// ------------------------------------------------------------ playback
+const audio = $("audio");
+let actx, gainNode;
+function ensureGraph() {
+  if (actx) return;
+  try {
+    actx = new AudioContext();
+    const src = actx.createMediaElementSource(audio);
+    gainNode = actx.createGain();
+    src.connect(gainNode).connect(actx.destination);
+    applyMono();
+  } catch { actx = null; }
+}
+function applyMono() {
+  if (!gainNode) return;
+  gainNode.channelCount = S.stereo ? 2 : 1;
+  gainNode.channelCountMode = "explicit";
+  gainNode.channelInterpretation = "speakers";
+}
+function seek(t) { audio.currentTime = t; draw(); }
+function togglePlay() {
+  if (!S.video) return;
+  ensureGraph(); actx && actx.resume();
+  if (!audio.paused) return audio.pause();
+  const t = audio.currentTime;
+  if (t < S.sel[0] || t >= S.sel[1] - 0.02) audio.currentTime = S.sel[0];
+  audio.play();
+}
+audio.addEventListener("play", () => { $("playIcon").setAttribute("href", "#i-pause"); requestAnimationFrame(tick); });
+audio.addEventListener("pause", () => { $("playIcon").setAttribute("href", "#i-play"); draw(); });
+function tick() {
+  if (audio.paused) return;
+  const t = audio.currentTime;
+  if (t >= S.sel[1]) {
+    if (S.loop) audio.currentTime = S.sel[0];
+    else { audio.pause(); audio.currentTime = S.sel[1]; }
+  }
+  if (gainNode) {
+    const vol = +$("volume").value / 100, fi = +$("fadeIn").value, fo = +$("fadeOut").value;
+    let g = vol;
+    if (fi > 0) g *= clamp((t - S.sel[0]) / fi, 0, 1);
+    if (fo > 0) g *= clamp((S.sel[1] - t) / fo, 0, 1);
+    gainNode.gain.setTargetAtTime(g, actx.currentTime, 0.015);
+  } else {
+    audio.volume = Math.min(1, +$("volume").value / 100);
+  }
+  // keep the playhead visible when zoomed in
+  if (t > S.view[1] && S.view[1] < S.dur) { const sp = S.view[1] - S.view[0]; setView(t - sp * 0.1, t + sp * 0.9); }
+  draw();
+  requestAnimationFrame(tick);
+}
+$("playBtn").onclick = togglePlay;
+$("loopBtn").onclick = () => { S.loop = !S.loop; $("loopBtn").classList.toggle("on", S.loop); };
+function setIn() { const t = audio.currentTime; if (t < S.sel[1]) { S.sel[0] = t; syncTimes(); draw(); } }
+function setOut() { const t = audio.currentTime; if (t > S.sel[0]) { S.sel[1] = t; syncTimes(); draw(); } }
+$("inBtn").onclick = setIn; $("outBtn").onclick = setOut;
+
+document.addEventListener("keydown", (e) => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select" || document.querySelector("dialog[open]")) return;
+  if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+  else if (e.key === "i" || e.key === "I") setIn();
+  else if (e.key === "o" || e.key === "O") setOut();
+  else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    const d = (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 0.01 : 1);
+    seek(clamp(audio.currentTime + d, 0, S.dur));
+  }
+});
+
+// ------------------------------------------------------------ target
+const ICON = { pack: "i-folder", resources: "i-folder", zip: "i-zip", mod: "i-cube" };
+const KIND = { pack: "Resource pack", resources: "Recursos", zip: "Pack .zip", mod: "Mod" };
+
+async function setTarget(path, ns) {
+  try {
+    const q = new URLSearchParams({ path }); if (ns) q.set("ns", ns);
+    const info = await api(`/api/target?${q}`);
+    S.target = info;
+    if (!ns) $("ns").value = info.namespace;
+    $("nsList").innerHTML = info.namespaces.map((n) => `<option value="${esc(n)}">`).join("");
+    S.sounds = info.sounds;
+    renderTarget(); renderLib(); updateAll();
+    store.set("target", info.path);
+    return true;
+  } catch (e) {
+    toast(e.message);
+    return false;
+  }
+}
+async function refreshSounds() {
+  if (!S.target) return;
+  const ns = currentNs();
+  if (!ns) { S.sounds = []; return renderLib(); }
+  try {
+    const info = await api(`/api/target?${new URLSearchParams({ path: S.target.path, ns })}`);
+    S.sounds = info.sounds; renderLib(); updateAll();
+  } catch {}
+}
+function renderTarget() {
+  const t = S.target, box = $("targetBox");
+  $("cardTarget").classList.toggle("ready", !!t);
+  $("revealBtn").style.display = t ? "" : "none";
+  if (!t) { box.className = "target empty"; box.textContent = "Elegir resource pack o mod…"; return; }
+  box.className = "target";
+  box.innerHTML = `<div class="ic"><svg><use href="#${ICON[t.kind]}"/></svg></div>
+    <div class="meta"><div class="n">${esc(t.name)}<span class="badge g">${KIND[t.kind]}</span></div>
+    <div class="p" title="${esc(t.path)}">‎${esc(t.kind === "mod" ? t.root : t.path)}</div></div>
+    <button class="btn sm">Cambiar</button>`;
+}
+$("targetBox").onclick = openPicker;
+$("revealBtn").onclick = () => S.target && api("/api/reveal", { path: S.target.kind === "mod" ? S.target.root : S.target.path });
+
+async function openPicker() {
+  $("pickLists").innerHTML = `<div class="grp"><h4>Cargando…</h4></div>`;
+  $("pickDlg").showModal();
+  try {
+    const st = await api("/api/state");
+    S.detected = st.detected;
+    let html = "";
+    const item = (p) => `<button class="pick${S.target && S.target.path === p.path ? " cur" : ""}" data-path="${esc(p.path)}">
+      <svg><use href="#${p.kind === "zip" ? "i-zip" : "i-folder"}"/></svg><span class="nm">${esc(p.name)}</span>
+      ${p.kind === "zip" ? '<span class="badge">zip</span>' : ""}</button>`;
+    if (st.recents.length) html += `<div class="grp"><h4>Recientes</h4>${st.recents.map(item).join("")}</div>`;
+    for (const g of st.detected) {
+      html += `<div class="grp"><h4>${esc(g.label)} · resourcepacks</h4>${g.packs.length ? g.packs.map(item).join("") : '<div class="empty-lib" style="padding:8px">Sin packs todavía</div>'}</div>`;
+    }
+    $("pickLists").innerHTML = html || `<div class="grp"><div class="empty-lib">No se encontraron instancias de Minecraft. Usa “Carpeta” o “Pack nuevo”.</div></div>`;
+  } catch (e) { $("pickLists").innerHTML = `<div class="errbox show">${esc(e.message)}</div>`; }
+}
+$("pickLists").addEventListener("click", async (e) => {
+  const b = e.target.closest(".pick"); if (!b) return;
+  if (await setTarget(b.dataset.path)) $("pickDlg").close();
+});
+async function browse(kind) {
+  const initial = S.target ? (S.target.kind === "zip" ? S.target.path.replace(/[\\/][^\\/]*$/, "") : S.target.path) : (S.detected?.[0]?.dir || "");
+  const { path } = await api("/api/pick", { kind, initial });
+  return path;
+}
+$("pickFolder").onclick = async () => { const p = await browse("folder"); if (p && await setTarget(p)) $("pickDlg").close(); };
+$("pickZip").onclick = async () => { const p = await browse("zip"); if (p && await setTarget(p)) $("pickDlg").close(); };
+$("pickNew").onclick = () => {
+  $("pickDlg").close();
+  const dirs = (S.detected || []).map((g) => [g.dir, g.label]);
+  const sel = $("npDir");
+  sel.innerHTML = dirs.map(([d, l]) => `<option value="${esc(d)}">${esc(l)} — resourcepacks</option>`).join("");
+  if (!dirs.length) sel.innerHTML = `<option value="">Elige una carpeta…</option>`;
+  showErr("npErr", "");
+  $("npNs").value = $("ns").value && $("ns").value !== "minecraft" ? $("ns").value : "";
+  $("newDlg").showModal(); $("npName").focus();
+};
+$("npBrowse").onclick = async () => {
+  const p = await browse("parent"); if (!p) return;
+  const o = document.createElement("option"); o.value = p; o.textContent = p; $("npDir").append(o); $("npDir").value = p;
+};
+$("npNs").addEventListener("input", (e) => { e.target.value = cleanNs(e.target.value); });
+$("npCreate").onclick = async () => {
+  showErr("npErr", "");
+  try {
+    const { path } = await api("/api/newpack", { dir: $("npDir").value, name: $("npName").value, description: $("npDesc").value, namespace: $("npNs").value });
+    $("newDlg").close();
+    const ns = $("npNs").value;
+    await setTarget(path);
+    if (ns) { $("ns").value = ns; refreshSounds(); updateAll(); }
+    toast("Pack creado");
+  } catch (e) { showErr("npErr", e.message); }
+};
+document.querySelectorAll("dialog [data-close]").forEach((b) => b.onclick = () => b.closest("dialog").close());
+document.querySelectorAll("dialog").forEach((d) => d.addEventListener("click", (e) => { if (e.target === d) d.close("cancel"); }));
+
+function ask(dlg) {
+  return new Promise((resolve) => {
+    const d = $(dlg);
+    d.querySelectorAll(".m-foot button[value]").forEach((b) => b.onclick = () => d.close(b.value));
+    d.onclose = () => resolve(d.returnValue || "cancel");
+    d.returnValue = ""; d.showModal();
+  });
+}
+
+// ------------------------------------------------------------ sound form
+const cleanName = (v) => v.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_.\-]/g, "").replace(/\.{2,}/g, ".");
+const cleanNs = (v) => v.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_.\-]/g, "");
+const currentNs = () => $("ns").value.trim() || "minecraft";
+const currentName = () => $("name").value.trim().replace(/^\.+|\.+$/g, "");
+
+$("name").addEventListener("input", (e) => { const p = e.target.selectionStart, v = cleanName(e.target.value); if (v !== e.target.value) { e.target.value = v; e.target.setSelectionRange(p - 1, p - 1); } updateAll(); });
+let nsT;
+$("ns").addEventListener("input", (e) => { e.target.value = cleanNs(e.target.value); updateAll(); clearTimeout(nsT); nsT = setTimeout(refreshSounds, 300); });
+$("chanSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  S.stereo = b.dataset.v === "stereo"; store.set("stereo", S.stereo); renderChan(); applyMono();
+});
+function renderChan() { $("chanSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.v === "stereo") === S.stereo))); }
+$("stream").checked = store.get("stream", true);
+$("stream").onchange = () => store.set("stream", $("stream").checked);
+for (const [id, unit, k] of [["fadeIn", " s", 1], ["fadeOut", " s", 1], ["volume", " %", 1]]) {
+  const el = $(id), show = () => $(id + "V").textContent = (+el.value).toString().replace(".", ",") + unit;
+  el.addEventListener("input", show); show();
+}
+
+function updateAll() {
+  const ns = currentNs(), name = currentName();
+  $("pvEvent").textContent = name ? `${ns}:${name}` : "—";
+  $("pvFile").textContent = name ? `assets/${ns}/sounds/${name.replace(/\./g, "/")}.ogg` : "—";
+  const exists = !!name && S.sounds.some((s) => s.event === name);
+  $("existsWarn").classList.toggle("show", exists);
+  $("cardSound").classList.toggle("ready", !!name);
+  const ready = S.video && S.target && name && S.sel[1] - S.sel[0] > 0.05;
+  $("addBtn").disabled = !ready;
+  $("addBtn").textContent = !S.video ? "Carga un audio primero" : !S.target ? "Elige un destino" : !name ? "Ponle un nombre al sonido" : `Añadir a ${S.target.name}`;
+}
+
+async function addSound(mode = "new") {
+  showErr("addErr", ""); $("result").classList.remove("show");
+  const btn = $("addBtn"); btn.disabled = true;
+  const label = btn.textContent;
+  btn.innerHTML = `<span class="spin"></span> Convirtiendo a .ogg…`;
+  try {
+    const res = await api("/api/add", {
+      target: S.target.path, namespace: currentNs(), name: currentName(), videoId: S.video.id,
+      start: S.sel[0], end: S.sel[1], stereo: S.stereo, stream: $("stream").checked,
+      subtitle: $("subtitle").value, fadeIn: +$("fadeIn").value, fadeOut: +$("fadeOut").value,
+      volume: +$("volume").value / 100, mode,
+    });
+    if (res.exists) {
+      btn.textContent = label; btn.disabled = false;
+      $("existsTitle").textContent = `“${currentName()}” ya existe`;
+      const choice = await ask("existsDlg");
+      if (choice === "replace" || choice === "variant") return addSound(choice);
+      return;
+    }
+    $("resTitle").textContent = mode === "variant" ? "Variante añadida" : mode === "replace" ? "Sonido reemplazado" : "¡Sonido añadido!";
+    $("resCmd").textContent = res.command;
+    $("resHow").innerHTML = res.kind === "mod"
+      ? `Guardado en <code>${esc(res.file)}</code> (${(res.size / 1024).toFixed(0)} KB). Vuelve a lanzar el juego, o pulsa <kbd>F3</kbd> + <kbd>T</kbd> si ejecutas desde el IDE con recursos recargables.`
+      : res.kind === "zip"
+      ? `Guardado dentro del .zip (${(res.size / 1024).toFixed(0)} KB). Activa el pack en Opciones → Paquetes de recursos y pruébalo con el comando.`
+      : `Guardado en <code>${esc(res.file)}</code> (${(res.size / 1024).toFixed(0)} KB). Con el pack activado, pulsa <kbd>F3</kbd> + <kbd>T</kbd> en el juego para recargar y pruébalo con el comando.`;
+    $("result").classList.add("show");
+    await refreshSounds();
+    const el = document.querySelector(`.item[data-ev="${CSS.escape(currentName())}"]`);
+    if (el) { el.classList.add("new"); el.scrollIntoView({ block: "nearest" }); }
+    toast("Añadido al pack");
+  } catch (e) {
+    showErr("addErr", e.message);
+  } finally {
+    updateAll();
+  }
+}
+$("addBtn").onclick = () => addSound("new");
+$("copyCmd").onclick = () => copy($("resCmd").textContent);
+async function copy(txt) { try { await navigator.clipboard.writeText(txt); toast("Copiado"); } catch { toast("No se pudo copiar"); } }
+
+// ------------------------------------------------------------ library
+function renderLib() {
+  const lib = $("lib");
+  if (!S.target) { lib.innerHTML = `<div class="empty-lib">Elige un destino para ver sus sonidos.</div>`; $("libCount").textContent = ""; return; }
+  const q = $("libSearch").value.trim().toLowerCase();
+  const list = S.sounds.filter((s) => !q || s.event.includes(q));
+  $("libCount").textContent = `${S.sounds.length} · ${currentNs()}`;
+  if (!list.length) {
+    lib.innerHTML = `<div class="empty-lib">${S.sounds.length ? "Sin resultados" : `Aún no hay sonidos en <code>${esc(currentNs())}</code>.<br>¡Añade el primero!`}</div>`;
+    return;
+  }
+  lib.innerHTML = list.map((s) => {
+    const n = s.files.length, stream = s.files.some((f) => f.stream);
+    const info = [n > 1 ? `${n} variantes` : n === 1 ? "1 archivo" : "sin archivos", stream ? "stream" : "", s.subtitle ? "subtítulo" : ""].filter(Boolean).join(" · ");
+    return `<div class="item" data-ev="${esc(s.event)}">
+      <button class="btn sm icon ghost" data-act="play" title="Escuchar" ${n ? "" : "disabled"}><svg><use href="#i-play"/></svg></button>
+      <div class="nm"><div title="${esc(s.event)}">${esc(s.event)}</div><div>${info}</div></div>
+      <div class="acts">
+        <button class="btn sm icon ghost" data-act="copy" title="Copiar /playsound"><svg><use href="#i-copy"/></svg></button>
+        <button class="btn sm icon ghost danger" data-act="del" title="Eliminar"><svg><use href="#i-trash"/></svg></button>
+      </div></div>`;
+  }).join("");
+}
+$("libSearch").addEventListener("input", renderLib);
+let libPlaying = null;
+$("lib").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const ev = b.closest(".item").dataset.ev, s = S.sounds.find((x) => x.event === ev), ns = currentNs();
+  if (b.dataset.act === "copy") return copy(`/playsound ${ns}:${ev} master @s`);
+  if (b.dataset.act === "play") {
+    const la = $("libAudio");
+    document.querySelectorAll('#lib [data-act="play"] use').forEach((u) => u.setAttribute("href", "#i-play"));
+    if (libPlaying === ev && !la.paused) { la.pause(); libPlaying = null; return; }
+    const f = s.files[Math.floor(Math.random() * s.files.length)];
+    la.src = `/api/sound?${new URLSearchParams({ path: S.target.path, ns, name: f.name })}`;
+    la.play().catch(() => toast("No se pudo reproducir"));
+    libPlaying = ev; b.querySelector("use").setAttribute("href", "#i-pause");
+    la.onended = la.onpause = () => b.querySelector("use").setAttribute("href", "#i-play");
+    return;
+  }
+  if (b.dataset.act === "del") {
+    $("delName").textContent = `${ns}:${ev}`;
+    if (await ask("delDlg") !== "ok") return;
+    try { await api("/api/delete", { target: S.target.path, namespace: ns, event: ev }); toast("Eliminado"); refreshSounds(); }
+    catch (err) { toast(err.message); }
+  }
+});
+
+// ------------------------------------------------------------ lifecycle
+setInterval(() => api("/api/heartbeat", {}).catch(() => {}), 20000);
+api("/api/heartbeat", {}).catch(() => {});
+addEventListener("pagehide", () => navigator.sendBeacon("/api/bye", "1"));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+
+renderChan(); updateAll();
+(async () => {
+  const last = store.get("target", null);
+  if (last) await setTarget(last);
+  $("url").focus();
+})();
+</script>
+</body>
+</html>
