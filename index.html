@@ -329,6 +329,10 @@
         <h3 id="resTitle">¡Listo!</h3>
         <div class="cmd"><code id="resCmd"></code><button class="btn sm" id="copyCmd"><svg><use href="#i-copy"/></svg>Copiar</button></div>
         <p id="resHow"></p>
+        <div id="resDatagen" style="display:none">
+          <p id="resDatagenTxt"></p>
+          <div class="cmd"><code id="resLine"></code><button class="btn sm" id="copyLine"><svg><use href="#i-copy"/></svg>Copiar</button></div>
+        </div>
       </div>
     </section>
   </div>
@@ -885,6 +889,12 @@ async function addSound(mode = "new") {
       : res.kind === "zip"
       ? `Guardado dentro del .zip (${(res.size / 1024).toFixed(0)} KB). Activa el pack en Opciones → Paquetes de recursos y pruébalo con el comando.`
       : `Guardado en <code>${esc(res.file)}</code> (${(res.size / 1024).toFixed(0)} KB). Con el pack activado, pulsa <kbd>F3</kbd> + <kbd>T</kbd> en el juego para recargar y pruébalo con el comando.`;
+    const dg = res.datagen;
+    $("resDatagen").style.display = dg ? "" : "none";
+    if (dg) {
+      $("resLine").textContent = dg.line;
+      $("resDatagenTxt").innerHTML = `Este mod genera sus traducciones con datagen: el subtítulo ya está en <code>src/main/generated/…/en_us.json</code>, pero añade esta línea a ${dg.provider ? `<code>${esc(dg.provider)}</code>` : "tu proveedor de idioma"} para que no se pierda al volver a ejecutar el datagen.`;
+    }
     $("result").classList.add("show");
     await refreshSounds();
     const el = document.querySelector(`.item[data-ev="${CSS.escape(currentName())}"]`);
@@ -898,6 +908,7 @@ async function addSound(mode = "new") {
 }
 $("addBtn").onclick = () => addSound("new");
 $("copyCmd").onclick = () => copy($("resCmd").textContent);
+$("copyLine").onclick = () => copy($("resLine").textContent);
 async function copy(txt) { try { await navigator.clipboard.writeText(txt); toast("Copiado"); } catch { toast("No se pudo copiar"); } }
 
 // ------------------------------------------------------------ library
@@ -943,7 +954,11 @@ $("lib").addEventListener("click", async (e) => {
   if (b.dataset.act === "del") {
     $("delName").textContent = `${ns}:${ev}`;
     if (await ask("delDlg") !== "ok") return;
-    try { await api("/api/delete", { target: S.target.path, namespace: ns, event: ev }); toast("Eliminado"); refreshSounds(); }
+    try {
+      const r = await api("/api/delete", { target: S.target.path, namespace: ns, event: ev });
+      toast(r.datagenKey ? `Eliminado · quita ${r.datagenKey} del datagen` : "Eliminado");
+      refreshSounds();
+    }
     catch (err) { toast(err.message); }
   }
 });

@@ -365,6 +365,7 @@ def resolve_target(path):
         raise UserError("La ruta ya no existe.")
     preferred_ns = None
     suggested = []
+    generated = project_root = None
     if p.is_file():
         if p.suffix.lower() != ".zip":
             raise UserError("Elige una carpeta o un archivo .zip.")
@@ -385,6 +386,9 @@ def resolve_target(path):
         if mod_root:
             t, kind, name = FolderTarget(mod_root), "mod", p.name
             suggested = mod_ids(p)
+            generated = mod_root.parent / "generated"
+            if generated.is_dir():
+                project_root = p
         elif (p / "assets").is_dir():
             t, kind, name = FolderTarget(p), "resources", p.name
         elif p.name == "assets":
@@ -413,7 +417,64 @@ def resolve_target(path):
         "root": str(getattr(t, "root", p)),
         "namespaces": namespaces or ["minecraft"], "namespace": default_ns,
     }
+    if generated and generated.is_dir():
+        info["generated"] = str(generated)
+        info["project"] = str(project_root)
     return t, info
+
+
+def find_language_provider(project):
+    """The datagen class that writes the mod's translations, if any."""
+    src = Path(project) / "src"
+    for f in src.rglob("*.java") if src.is_dir() else []:
+        if "build" in f.parts:
+            continue
+        try:
+            text = f.read_text("utf-8", "replace")
+        except OSError:
+            continue
+        if re.search(r"extends\s+FabricLanguageProvider\b", text):
+            return f
+    return None
+
+
+def datagen_lang(info, ns):
+    """For a mod that generates its translations, where the subtitle must go.
+
+    Writing a lang file into src/main/resources would shadow the generated
+    one (same path on the classpath), so subtitles go into the generated
+    en_us.json instead, and the user is shown the line for the provider.
+    """
+    if not info.get("generated"):
+        return None
+    lang = Path(info["generated"]) / "assets" / ns / "lang" / "en_us.json"
+    provider = find_language_provider(info["project"])
+    if not lang.is_file() and not provider:
+        return None
+    return {"lang": lang, "provider": provider}
+
+
+def update_generated_lang(path, key, value):
+    """Set or remove one key, keeping datagen's sorted, 2-space format."""
+    data = {}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text("utf-8-sig"))
+        except ValueError:
+            raise UserError(f"{path.name} generado tiene JSON inválido.")
+    if value is None:
+        if key not in data:
+            return
+        data.pop(key)
+    else:
+        data[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+                    "utf-8", newline="\n")
+
+
+def java_string(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def read_json(target, rel):
@@ -532,13 +593,16 @@ def add_sound(data):
             sound["stream"] = True
         entry = dict(entry)
         entry["sounds"] = list(entry.get("sounds", [])) + [sound]
+        datagen = None
         if subtitle:
             key = f"subtitles.{ns}.{name}"
             entry["subtitle"] = key
-            lang_rel = f"assets/{ns}/lang/en_us.json"
-            lang = read_json(target, lang_rel)
-            lang[key] = subtitle
-            changes[lang_rel] = dump_json(lang)
+            datagen = datagen_lang(info, ns)
+            if not datagen:
+                lang_rel = f"assets/{ns}/lang/en_us.json"
+                lang = read_json(target, lang_rel)
+                lang[key] = subtitle
+                changes[lang_rel] = dump_json(lang)
         elif mode == "replace":
             entry.pop("subtitle", None)
         sounds[name] = entry
@@ -549,15 +613,25 @@ def add_sound(data):
                 changes["pack.mcmeta"] = dump_json(PACK_MCMETA)
         target.apply(changes)
     remember_target(info["path"], ns)
-    return {
+    result = {
         "ok": True, "file": file_rel, "event": f"{ns}:{name}",
         "command": f"/playsound {ns}:{name} master @s",
         "size": len(ogg), "kind": info["kind"],
     }
+    if datagen:
+        with write_lock:
+            update_generated_lang(datagen["lang"], key, subtitle)
+        provider = datagen["provider"]
+        result["datagen"] = {
+            "line": f"builder.add({java_string(key)}, {java_string(subtitle)});",
+            "provider": provider.name if provider else None,
+            "providerPath": str(provider) if provider else None,
+        }
+    return result
 
 
 def delete_sound(data):
-    target, _ = resolve_target(str(data.get("target", "")))
+    target, info = resolve_target(str(data.get("target", "")))
     ns, name = str(data.get("namespace", "")), str(data.get("event", ""))
     with write_lock:
         sounds_rel = f"assets/{ns}/sounds.json"
@@ -584,7 +658,10 @@ def delete_sound(data):
                 lang.pop(sub)
                 changes[lang_rel] = dump_json(lang)
         target.apply(changes)
-    return {"ok": True}
+        datagen = datagen_lang(info, ns) if sub else None
+        if datagen:
+            update_generated_lang(datagen["lang"], sub, None)
+    return {"ok": True, "datagenKey": sub if datagen else None}
 
 
 def create_pack(data):
