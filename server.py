@@ -31,6 +31,7 @@ PORT = 8777
 ORIGIN = f"http://{HOST}:{PORT}"
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
+ICONS_DIR = BASE_DIR / "icons"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "MCSoundStudio"
 CACHE_DIR = DATA_DIR / "cache"
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -55,6 +56,14 @@ PACK_MCMETA = {
         "supported_formats": [15, 64],
     }
 }
+
+# Plain flat icon: a green square with an "S".
+ICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="6" fill="#34d399"/>'
+    '<text x="16" y="23.5" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" '
+    'font-size="21" font-weight="700" fill="#0f1113">S</text></svg>'
+)
 
 jobs = {}
 jobs_lock = threading.Lock()
@@ -718,6 +727,24 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path in ("/", "/index.html"):
                 return self.send_bytes(INDEX_FILE.read_bytes(), "text/html; charset=utf-8")
+            # A custom icon.png next to the app wins over the built-in icons.
+            custom = BASE_DIR / "icon.png"
+            if url.path in ("/icon", "/favicon.ico") or url.path.startswith("/icons/"):
+                if custom.is_file():
+                    return self.send_bytes(custom.read_bytes(), "image/png")
+                name = Path(url.path).name if url.path.startswith("/icons/") else "icon-256.png"
+                icon = ICONS_DIR / name
+                if re.fullmatch(r"icon-\d+\.png", name) and icon.is_file():
+                    return self.send_bytes(icon.read_bytes(), "image/png")
+                return self.send_bytes(ICON_SVG.encode("utf-8"), "image/svg+xml")
+            if url.path == "/manifest.json":
+                sizes = [16, 32, 48, 64, 128, 256]
+                return self.send_json(200, {
+                    "name": "Sound Studio", "short_name": "Sound Studio", "display": "standalone",
+                    "start_url": "/", "background_color": "#0f1113", "theme_color": "#0f1113",
+                    "icons": [{"src": f"/icons/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png"}
+                              for n in sizes],
+                })
             if parts[:2] == ["api", "jobs"] and len(parts) == 3:
                 with jobs_lock:
                     job = dict(jobs.get(parts[2], {}))
